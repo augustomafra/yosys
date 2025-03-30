@@ -144,6 +144,8 @@ void RTLIL_BACKEND::dump_wire(std::ostream &f, std::string indent, const RTLIL::
 		f << stringf("inout %d ", wire->port_id);
 	if (wire->is_signed)
 		f << stringf("signed ");
+	if (wire->is_signed)
+		f << stringf("real ");	
 	f << stringf("%s\n", wire->name.c_str());
 }
 

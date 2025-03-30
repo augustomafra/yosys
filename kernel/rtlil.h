@@ -1670,7 +1670,7 @@ public:
 	RTLIL::Module *module;
 	RTLIL::IdString name;
 	int width, start_offset, port_id;
-	bool port_input, port_output, upto, is_signed;
+	bool port_input, port_output, upto, is_signed, is_real;
 
 	RTLIL::Cell *driverCell() const    { log_assert(driverCell_); return driverCell_; };
 	RTLIL::IdString driverPort() const { log_assert(driverCell_); return driverPort_; };

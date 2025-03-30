@@ -702,6 +702,7 @@ void add_wire_for_ref(const RTLIL::Wire *ref, const std::string &str)
 
 	AstNode *wire = new AstNode(AST_WIRE, range);
 	wire->is_signed = ref->is_signed;
+	wire->is_real = ref->is_real;
 	wire->is_logic = true;
 	wire->str = str;
 

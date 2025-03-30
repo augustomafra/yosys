@@ -182,6 +182,8 @@ struct JsonWriter
 				f << stringf("          \"upto\": 1,\n");
 			if (w->is_signed)
 				f << stringf("          \"signed\": %d,\n", w->is_signed);
+			if (w->is_real)
+				f << stringf("          \"real\": %d,\n", w->is_real);			
 			f << stringf("          \"bits\": %s\n", get_bits(w).c_str());
 			f << stringf("        }");
 			first = false;
@@ -274,6 +276,8 @@ struct JsonWriter
 				f << stringf("          \"upto\": 1,\n");
 			if (w->is_signed)
 				f << stringf("          \"signed\": %d,\n", w->is_signed);
+			if (w->is_real)
+				f << stringf("          \"real\": %d,\n", w->is_real);			
 			f << stringf("          \"attributes\": {");
 			write_parameters(w->attributes);
 			f << stringf("\n          }\n");
