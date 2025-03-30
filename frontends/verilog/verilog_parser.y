@@ -644,7 +644,9 @@ module_arg_opt_assignment:
 			} else {
 				AstNode *wire = new AstNode(AST_IDENTIFIER);
 				wire->str = ast_stack.back()->children.back()->str;
-				if (ast_stack.back()->children.back()->is_reg || ast_stack.back()->children.back()->is_logic)
+				if (ast_stack.back()->children.back()->is_reg 
+				    || ast_stack.back()->children.back()->is_logic 
+					|| ast_stack.back()->children.back()->is_real)
 					ast_stack.back()->children.push_back(new AstNode(AST_INITIAL, new AstNode(AST_BLOCK, new AstNode(AST_ASSIGN_LE, wire, $2))));
 				else
 					ast_stack.back()->children.push_back(new AstNode(AST_ASSIGN, wire, $2));
@@ -913,6 +915,13 @@ wire_type_token:
 		astbuf3->is_signed = true;
 		astbuf3->range_left = 31;
 		astbuf3->range_right = 0;
+	} |
+	// real
+	TOK_REAL {
+		astbuf3->is_real = true;
+	} | 
+	TOK_VAR TOK_REAL {
+		astbuf3->is_real = true;
 	};
 
 net_type:
@@ -2035,7 +2044,7 @@ wire_name_and_opt_assign:
 				delete astbuf1->attributes.at(ID::defaultvalue);
 			astbuf1->attributes[ID::defaultvalue] = $3;
 		}
-		else if (astbuf1->is_reg || astbuf1->is_logic){
+		else if (astbuf1->is_reg || astbuf1->is_logic || astbuf1->is_real){
 			AstNode *assign = new AstNode(AST_ASSIGN_LE, wire, $3);
 			AstNode *block = new AstNode(AST_BLOCK, assign);
 			AstNode *init = new AstNode(AST_INITIAL, block);

@@ -224,6 +224,7 @@ AstNode::AstNode(AstNodeType type, AstNode *child1, AstNode *child2, AstNode *ch
 	range_valid = false;
 	range_swapped = false;
 	is_custom_type = false;
+	is_real = false;
 	port_id = 0;
 	range_left = -1;
 	range_right = 0;
@@ -336,6 +337,8 @@ void AstNode::dumpAst(FILE *f, std::string indent) const
 		fprintf(f, " output");
 	if (is_logic)
 		fprintf(f, " logic");
+	if (is_real)
+		fprintf(f, " real");	
 	if (is_reg) // this is an AST dump, not Verilog - if we see "logic reg" that's fine.
 		fprintf(f, " reg");
 	if (is_signed)
@@ -464,7 +467,7 @@ void AstNode::dumpVlog(FILE *f, std::string indent) const
 			fprintf(f, "%s" "input", indent.c_str());
 		else if (is_output)
 			fprintf(f, "%s" "output", indent.c_str());
-		else if (!is_reg)
+		else if (!is_reg && !is_real)
 			fprintf(f, "%s" "wire", indent.c_str());
 		if (is_reg)
 			fprintf(f, "%s" "reg", (is_input || is_output) ? " " : indent.c_str());
@@ -783,6 +786,8 @@ bool AstNode::operator==(const AstNode &other) const
 		return false;
 	if (is_logic != other.is_logic)
 		return false;
+	if (is_real != other.is_real)
+		return false;	
 	if (is_reg != other.is_reg)
 		return false;
 	if (is_signed != other.is_signed)

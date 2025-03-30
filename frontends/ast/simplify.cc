@@ -1156,6 +1156,8 @@ bool AstNode::simplify(bool const_fold, int stage, int width_hint, bool sign_hin
 						first_node->is_reg = true;
 					if (node->is_logic)
 						first_node->is_logic = true;
+					if (node->is_real)
+						first_node->is_real = true;					
 					if (node->is_signed)
 						first_node->is_signed = true;
 					for (auto &it : node->attributes) {
@@ -1392,7 +1394,9 @@ bool AstNode::simplify(bool const_fold, int stage, int width_hint, bool sign_hin
 		if (children[0]->id2ast && !children[0]->was_checked) {
 			if ((type == AST_ASSIGN_LE || type == AST_ASSIGN_EQ) && children[0]->id2ast->is_logic)
 				children[0]->id2ast->is_reg = true; // if logic type is used in a block asignment
-			if ((type == AST_ASSIGN_LE || type == AST_ASSIGN_EQ) && !children[0]->id2ast->is_reg)
+			if ((type == AST_ASSIGN_LE || type == AST_ASSIGN_EQ) 
+				 && !children[0]->id2ast->is_reg 
+				 && !children[0]->id2ast->is_real)
 				log_warning("wire '%s' is assigned in a block at %s.\n", children[0]->str.c_str(), loc_string().c_str());
 			if (type == AST_ASSIGN && children[0]->id2ast->is_reg) {
 				bool is_rand_reg = false;
@@ -4805,7 +4809,7 @@ void AstNode::mem2reg_as_needed_pass1(dict<AstNode*, pool<std::string>> &mem2reg
 	}
 
 	// also activate if requested, either by using mem2reg attribute or by declaring array as 'wire' instead of 'reg' or 'logic'
-	if (type == AST_MEMORY && (get_bool_attribute(ID::mem2reg) || (flags & AstNode::MEM2REG_FL_ALL) || !(is_reg || is_logic)))
+	if (type == AST_MEMORY && (get_bool_attribute(ID::mem2reg) || (flags & AstNode::MEM2REG_FL_ALL) || !(is_reg || is_logic || is_real)))
 		mem2reg_candidates[this] |= AstNode::MEM2REG_FL_FORCED;
 
 	if ((type == AST_MODULE || type == AST_INTERFACE) && get_bool_attribute(ID::mem2reg))
