@@ -53,7 +53,7 @@ namespace RTLIL
 		CONST_FLAG_NONE   = 0,
 		CONST_FLAG_STRING = 1,
 		CONST_FLAG_SIGNED = 2,  // only used for parameters
-		CONST_FLAG_REAL   = 4   // only used for parameters
+		CONST_FLAG_REAL   = 4
 	};
 
 	struct Const;
@@ -693,12 +693,13 @@ private:
 	friend class KernelRtlilTest;
 	FRIEND_TEST(KernelRtlilTest, ConstStr);
 	using bitvectype = std::vector<RTLIL::State>;
-	enum class backing_tag: bool { bits, string };
+	enum class backing_tag: unsigned char { bits, string, real };
 	// Do not access the union or tag even in Const methods unless necessary
 	mutable backing_tag tag;
 	union {
 		mutable bitvectype bits_;
 		mutable std::string str_;
+		mutable double real_;
 	};
 
 	// Use these private utilities instead
@@ -707,16 +708,21 @@ private:
 
 	bitvectype* get_if_bits() const { return is_bits() ? &bits_ : NULL; }
 	std::string* get_if_str() const { return is_str() ? &str_ : NULL; }
+	double* get_if_real() const { return is_real() ? &real_ : NULL; }
 
 	bitvectype& get_bits() const;
 	std::string& get_str() const;
+	double& get_real() const;
 public:
+	struct real_tag_t {};
+
 	Const() : flags(RTLIL::CONST_FLAG_NONE), tag(backing_tag::bits), bits_(std::vector<RTLIL::State>()) {}
 	Const(const std::string &str);
 	Const(long long val, int width = 32);
 	Const(RTLIL::State bit, int width = 1);
 	Const(const std::vector<RTLIL::State> &bits) : flags(RTLIL::CONST_FLAG_NONE), tag(backing_tag::bits), bits_(bits) {}
 	Const(const std::vector<bool> &bits);
+	Const(double real, real_tag_t);
 	Const(const RTLIL::Const &other);
 	Const(RTLIL::Const &&other);
 	RTLIL::Const &operator =(const RTLIL::Const &other);
@@ -729,6 +735,7 @@ public:
 	std::vector<RTLIL::State>& bits();
 	bool as_bool() const;
 	int as_int(bool is_signed = false) const;
+	double as_real() const;
 	std::string as_string(const char* any = "-") const;
 	static Const from_string(const std::string &str);
 	std::vector<RTLIL::State> to_bits() const;
@@ -806,6 +813,7 @@ public:
 	bool is_fully_undef() const;
 	bool is_fully_undef_x_only() const;
 	bool is_onehot(int *pos = nullptr) const;
+	bool is_real() const { return tag == backing_tag::real; }
 
 	RTLIL::Const extract(int offset, int len = 1, RTLIL::State padding = RTLIL::State::S0) const;
 
@@ -872,12 +880,13 @@ struct RTLIL::AttrObject
 struct RTLIL::SigChunk
 {
 	RTLIL::Wire *wire;
-	std::vector<RTLIL::State> data; // only used if wire == NULL, LSB at index 0
+	std::optional<double> real;
+	std::vector<RTLIL::State> data; // only used if wire == NULL and real == std::nullopt, LSB at index 0
 	int width, offset;
 
 	SigChunk() : wire(nullptr), width(0), offset(0) {}
-	SigChunk(const RTLIL::Const &value) : wire(nullptr), data(value.to_bits()), width(GetSize(data)), offset(0) {}
-	SigChunk(RTLIL::Const &&value) : wire(nullptr), data(value.to_bits()), width(GetSize(data)), offset(0) {}
+	SigChunk(const RTLIL::Const &value);
+	SigChunk(RTLIL::Const &&value);
 	SigChunk(RTLIL::Wire *wire) : wire(wire), width(GetSize(wire)), offset(0) {}
 	SigChunk(RTLIL::Wire *wire, int offset, int width = 1) : wire(wire), width(width), offset(offset) {}
 	SigChunk(const std::string &str) : SigChunk(RTLIL::Const(str)) {}
@@ -889,6 +898,7 @@ struct RTLIL::SigChunk
 	RTLIL::SigBit operator[](int offset) const;
 	inline int size() const { return width; }
 	inline bool is_wire() const { return wire != NULL; }
+	inline bool is_real() const { return real.has_value(); }
 
 	bool operator <(const RTLIL::SigChunk &other) const;
 	bool operator ==(const RTLIL::SigChunk &other) const;
@@ -897,11 +907,18 @@ struct RTLIL::SigChunk
 
 struct RTLIL::SigBit
 {
-	RTLIL::Wire *wire;
+	RTLIL::Wire *wire = nullptr;
 	union {
 		RTLIL::State data; // used if wire == NULL
 		int offset;        // used if wire != NULL
 	};
+
+private:
+	enum class backing_tag: bool { bit, real };
+	backing_tag tag = backing_tag::bit;
+
+public:
+	double real = 0.0; // used if tag == real && wire == NULL
 
 	SigBit();
 	SigBit(RTLIL::State bit);
@@ -914,7 +931,9 @@ struct RTLIL::SigBit
 	SigBit(const RTLIL::SigBit &sigbit) = default;
 	RTLIL::SigBit &operator =(const RTLIL::SigBit &other) = default;
 
-	inline bool is_wire() const { return wire != NULL; }
+	inline bool is_bit() const { return tag == backing_tag::bit; }
+	inline bool is_real() const { return tag == backing_tag::real; }
+	inline bool is_wire() const { return is_bit() ? wire != nullptr : false; }
 
 	bool operator <(const RTLIL::SigBit &other) const;
 	bool operator ==(const RTLIL::SigBit &other) const;
@@ -1089,6 +1108,7 @@ public:
 	bool is_wire() const;
 	bool is_chunk() const;
 	inline bool is_bit() const { return width_ == 1; }
+	bool is_real() const;
 
 	bool is_fully_const() const;
 	bool is_fully_zero() const;
@@ -1101,6 +1121,7 @@ public:
 
 	bool as_bool() const;
 	int as_int(bool is_signed = false) const;
+	double as_real() const;
 	std::string as_string() const;
 	RTLIL::Const as_const() const;
 	RTLIL::Wire *as_wire() const;
@@ -1743,6 +1764,7 @@ public:
 
 	// information about cell ports
 	bool known() const;
+	bool is_real() const;
 	bool input(const RTLIL::IdString &portname) const;
 	bool output(const RTLIL::IdString &portname) const;
 
@@ -1844,49 +1866,114 @@ public:
 	RTLIL::Process *clone() const;
 };
 
+inline RTLIL::SigBit::SigBit() : wire(NULL), data(RTLIL::State::S0), tag(backing_tag::bit), real(0.0) { }
+inline RTLIL::SigBit::SigBit(RTLIL::State bit) : wire(NULL), data(bit), tag(backing_tag::bit), real(0.0) { }
+inline RTLIL::SigBit::SigBit(bool bit) : wire(NULL), data(bit ? State::S1 : State::S0), tag(backing_tag::bit), real(0.0) { }
+inline RTLIL::SigBit::SigBit(RTLIL::Wire *wire) : wire(wire), offset(0), tag(backing_tag::bit), real(0.0) { log_assert(wire && wire->width == 1); }
+inline RTLIL::SigBit::SigBit(RTLIL::Wire *wire, int offset) : wire(wire), offset(offset), tag(backing_tag::bit), real(0.0) { log_assert(wire != nullptr); }
 
-inline RTLIL::SigBit::SigBit() : wire(NULL), data(RTLIL::State::S0) { }
-inline RTLIL::SigBit::SigBit(RTLIL::State bit) : wire(NULL), data(bit) { }
-inline RTLIL::SigBit::SigBit(bool bit) : wire(NULL), data(bit ? State::S1 : State::S0) { }
-inline RTLIL::SigBit::SigBit(RTLIL::Wire *wire) : wire(wire), offset(0) { log_assert(wire && wire->width == 1); }
-inline RTLIL::SigBit::SigBit(RTLIL::Wire *wire, int offset) : wire(wire), offset(offset) { log_assert(wire != nullptr); }
-inline RTLIL::SigBit::SigBit(const RTLIL::SigChunk &chunk) : wire(chunk.wire) { log_assert(chunk.width == 1); if (wire) offset = chunk.offset; else data = chunk.data[0]; }
-inline RTLIL::SigBit::SigBit(const RTLIL::SigChunk &chunk, int index) : wire(chunk.wire) { if (wire) offset = chunk.offset + index; else data = chunk.data[index]; }
+inline RTLIL::SigBit::SigBit(const RTLIL::SigChunk &chunk)
+    : wire(nullptr)
+	, data(State::S0)
+	, tag(chunk.is_real() ? backing_tag::real : backing_tag::bit)
+	, real(0.0)
+{
+	log_assert(chunk.width == 1);
+	switch (tag) {
+	case backing_tag::bit:
+		wire = chunk.wire;
+		if (wire)
+			offset = chunk.offset;
+		else
+			data = chunk.data[0];
+		break;
+	case backing_tag::real:
+		real = *chunk.real;
+		break;
+	}
+}
+
+inline RTLIL::SigBit::SigBit(const RTLIL::SigChunk &chunk, int index) 
+	: wire(nullptr)
+	, data(State::S0)
+	, tag(chunk.is_real() ? backing_tag::real : backing_tag::bit)
+	, real(0.0)
+{
+	switch (tag) {
+	case backing_tag::bit:
+		wire = chunk.wire;
+		if (wire)
+			offset = chunk.offset + index;
+		else
+			data = chunk.data[index];
+		break;
+	case backing_tag::real:
+		real = *chunk.real;
+		break;
+	}
+}
 
 inline bool RTLIL::SigBit::operator<(const RTLIL::SigBit &other) const {
-	if (wire == other.wire)
-		return wire ? (offset < other.offset) : (data < other.data);
-	if (wire != nullptr && other.wire != nullptr)
-		return wire->name < other.wire->name;
-	return (wire != nullptr) < (other.wire != nullptr);
+	if (tag == other.tag) {
+		switch (tag) {
+		case backing_tag::bit:
+			if (wire == other.wire)
+				return wire ? (offset < other.offset) : (data < other.data);
+			if (wire != nullptr && other.wire != nullptr)
+				return wire->name < other.wire->name;
+			return (wire != nullptr) < (other.wire != nullptr);
+		case backing_tag::real:
+			return real < other.real;
+		}
+	}
+	return tag < other.tag;
 }
 
 inline bool RTLIL::SigBit::operator==(const RTLIL::SigBit &other) const {
-	return (wire == other.wire) && (wire ? (offset == other.offset) : (data == other.data));
+	if (tag != other.tag)
+		return false;
+	switch (tag) {
+	case backing_tag::bit:
+		return (wire == other.wire) && (wire ? (offset == other.offset) : (data == other.data));
+	case backing_tag::real:
+		return real == other.real;
+	}
 }
 
 inline bool RTLIL::SigBit::operator!=(const RTLIL::SigBit &other) const {
-	return (wire != other.wire) || (wire ? (offset != other.offset) : (data != other.data));
+	return !(*this == other);
 }
 
 inline Hasher RTLIL::SigBit::hash_into(Hasher h) const {
-	if (wire) {
-		h.eat(offset);
-		h.eat(wire->name);
-		return h;
+	switch (tag) {
+	case backing_tag::bit:
+		if (wire) {
+			h.eat(offset);
+			h.eat(wire->name);
+		} else
+			h.eat(data);
+		break;
+	case backing_tag::real:
+		h.eat(static_cast<uint64_t>(real));
+		break;
 	}
-	h.eat(data);
 	return h;
 }
 
 
 inline Hasher RTLIL::SigBit::hash_top() const {
 	Hasher h;
-	if (wire) {
-		h.force(hashlib::legacy::djb2_add(wire->name.index_, offset));
-		return h;
+	switch (tag) {
+	case backing_tag::bit:
+		if (wire) {
+			h.force(hashlib::legacy::djb2_add(wire->name.index_, offset));
+		} else
+			h.force(data);
+		break;
+	case backing_tag::real:
+		h.force(static_cast<uint64_t>(real));
+		break;
 	}
-	h.force(data);
 	return h;
 }
 

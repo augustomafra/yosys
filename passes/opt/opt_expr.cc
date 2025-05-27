@@ -523,6 +523,9 @@ void replace_const_cells(RTLIL::Design *design, RTLIL::Module *module, bool cons
 #define ACTION_DO(_p_, _s_) do { cover("opt.opt_expr.action_" S__LINE__); replace_cell(assign_map, module, cell, input.as_string(), _p_, _s_); goto next_cell; } while (0)
 #define ACTION_DO_Y(_v_) ACTION_DO(ID::Y, RTLIL::SigSpec(RTLIL::State::S ## _v_))
 
+		if (cell->is_real())
+			continue;
+
 		bool detect_const_and = false;
 		bool detect_const_or = false;
 
@@ -2211,6 +2214,8 @@ void replace_const_connections(RTLIL::Module *module) {
 	{
 		std::vector<std::pair<RTLIL::IdString, SigSpec>> changes;
 		for (auto &conn : cell->connections()) {
+			if (conn.second.is_real())
+				continue;
 			SigSpec mapped = assign_map(conn.second);
 			if (conn.second != mapped && mapped.is_fully_const())
 				changes.push_back({conn.first, mapped});

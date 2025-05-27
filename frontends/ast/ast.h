@@ -343,7 +343,7 @@ namespace AST
 		// helper functions for real valued const eval
 		int isConst() const; // return '1' for AST_CONSTANT and '2' for AST_REALVALUE
 		double asReal(bool is_signed);
-		RTLIL::Const realAsConst(int width);
+		RTLIL::Const realAsConst(int width, bool round_to_binary = false);
 
 		// helpers for enum
 		void allocateDefaultEnumValues();

@@ -2185,7 +2185,7 @@ bool AstNode::simplify(bool const_fold, int stage, int width_hint, bool sign_hin
 				input_error("Non-constant width range on parameter decl.\n");
 			int width = std::abs(children[1]->range_left - children[1]->range_right) + 1;
 			if (children[0]->type == AST_REALVALUE) {
-				RTLIL::Const constvalue = children[0]->realAsConst(width);
+				RTLIL::Const constvalue = children[0]->realAsConst(width, /*round_to_binary=*/true);
 				log_file_warning(filename, location.first_line, "converting real value %e to binary %s.\n",
 						children[0]->realvalue, log_signal(constvalue));
 				delete children[0];

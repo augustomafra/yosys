@@ -214,6 +214,11 @@ std::string& Const::get_str() const {
 	return *get_if_str();
 }
 
+double& Const::get_real() const {
+	check(is_real());
+	return *get_if_real();
+}
+
 RTLIL::Const::Const(const std::string &str)
 {
 	flags = RTLIL::CONST_FLAG_STRING;
@@ -256,6 +261,13 @@ RTLIL::Const::Const(const std::vector<bool> &bits)
 		bv.emplace_back(b ? State::S1 : State::S0);
 }
 
+RTLIL::Const::Const(double real, real_tag_t)
+	: flags(RTLIL::CONST_FLAG_REAL)
+	, tag(backing_tag::real)
+	, real_(real) 
+{ 
+}
+
 RTLIL::Const::Const(const RTLIL::Const &other) {
 	tag = other.tag;
 	flags = other.flags;
@@ -263,7 +275,9 @@ RTLIL::Const::Const(const RTLIL::Const &other) {
 		new ((void*)&str_) std::string(other.get_str());
 	else if (is_bits())
 		new ((void*)&bits_) bitvectype(other.get_bits());
-	else
+	else if (is_real())
+		real_ = other.get_real();
+	else		
 		check(false);
 }
 
@@ -274,6 +288,8 @@ RTLIL::Const::Const(RTLIL::Const &&other) {
 		new ((void*)&str_) std::string(std::move(other.get_str()));
 	else if (is_bits())
 		new ((void*)&bits_) bitvectype(std::move(other.get_bits()));
+	else if (is_real())
+		real_ = other.get_real();
 	else
 		check(false);
 }
@@ -283,8 +299,9 @@ RTLIL::Const &RTLIL::Const::operator =(const RTLIL::Const &other) {
 	if (other.is_str()) {
 		if (!is_str()) {
 			// sketchy zone
-			check(is_bits());
-			bits_.~bitvectype();
+			if (is_bits()) {
+				bits_.~bitvectype();
+			}
 			(void)new ((void*)&str_) std::string();
 		}
 		tag = other.tag;
@@ -292,12 +309,25 @@ RTLIL::Const &RTLIL::Const::operator =(const RTLIL::Const &other) {
 	} else if (other.is_bits()) {
 		if (!is_bits()) {
 			// sketchy zone
-			check(is_str());
-			str_.~string();
+			if (is_str()) {
+				str_.~string();
+			}
 			(void)new ((void*)&bits_) bitvectype();
 		}
 		tag = other.tag;
 		get_bits() = other.get_bits();
+	} else if (other.is_real()) {
+		if (!is_real()) {
+			// sketchy zone
+			if (is_str()) {
+				str_.~string();
+			}
+			if (is_bits()) {
+				bits_.~bitvectype();
+			}			
+		}
+		tag = other.tag;
+		get_real() = other.get_real();
 	} else {
 		check(false);
 	}
@@ -309,7 +339,7 @@ RTLIL::Const::~Const() {
 		bits_.~bitvectype();
 	else if (is_str())
 		str_.~string();
-	else
+	else if (!is_real())
 		check(false);
 }
 
@@ -329,6 +359,12 @@ bool RTLIL::Const::operator ==(const RTLIL::Const &other) const
 {
 	if (size() != other.size())
 		return false;
+
+	if (is_real() != other.is_real())
+		return false;
+
+	if (is_real() && other.is_real())
+		return as_real() == other.as_real();
 
 	for (int i = 0; i < size(); i++)
 	if ((*this)[i] != other[i])
@@ -378,6 +414,12 @@ int RTLIL::Const::as_int(bool is_signed) const
 		for (size_t i = bv.size(); i < 32; i++)
 			ret |= 1 << i;
 	return ret;
+}
+
+double RTLIL::Const::as_real() const
+{
+	check(is_real());
+	return real_;
 }
 
 int RTLIL::Const::get_min_size(bool is_signed) const
@@ -500,9 +542,11 @@ std::string RTLIL::Const::decode_string() const
 int RTLIL::Const::size() const {
 	if (is_str())
 		return 8 * str_.size();
-	else {
-		check(is_bits());
+	else if (is_bits()) {
 		return bits_.size();
+	} else {
+		check(is_real());
+		return 1;
 	}
 }
 
@@ -4032,6 +4076,11 @@ bool RTLIL::Cell::known() const
 	return false;
 }
 
+bool RTLIL::Cell::is_real() const
+{
+	return std::any_of(connections_.begin(), connections_.end(), [](const std::pair<IdString, SigSpec> &conn) { return conn.second.is_real(); });
+}
+
 bool RTLIL::Cell::input(const RTLIL::IdString& portname) const
 {
 	if (yosys_celltypes.cell_known(type))
@@ -4181,15 +4230,44 @@ bool RTLIL::Cell::is_mem_cell() const
 	return type.in(ID($mem), ID($mem_v2)) || has_memid();
 }
 
-RTLIL::SigChunk::SigChunk(const RTLIL::SigBit &bit)
+RTLIL::SigChunk::SigChunk(const RTLIL::Const &value) 
+	: wire(nullptr)
+	, offset(0) 
 {
-	wire = bit.wire;
-	offset = 0;
-	if (wire == NULL)
-		data = {bit.data};
-	else
-		offset = bit.offset;
-	width = 1;
+	if (value.is_real()) {
+		real = value.as_real();
+		width = GetSize(value);
+	} else {
+		data = value.to_bits();
+		width = GetSize(data);
+	}
+}
+
+RTLIL::SigChunk::SigChunk(RTLIL::Const &&value) 
+	: wire(nullptr)
+	, offset(0) 
+{
+	if (value.is_real()) {
+		real = value.as_real();
+		width = GetSize(std::move(value));
+	} else {
+		data = std::move(value).to_bits();
+		width = GetSize(data);
+	}
+}
+
+RTLIL::SigChunk::SigChunk(const RTLIL::SigBit &bit)
+	: wire(bit.is_real() ? nullptr : bit.wire)
+	, width(1)
+	, offset(0)
+{
+	if (!bit.is_real()) {
+		if (wire == NULL)
+			data = {bit.data};
+		else
+			offset = bit.offset;
+	} else
+		real = bit.real;
 }
 
 RTLIL::SigChunk RTLIL::SigChunk::extract(int offset, int length) const
@@ -4244,7 +4322,11 @@ bool RTLIL::SigChunk::operator <(const RTLIL::SigChunk &other) const
 
 bool RTLIL::SigChunk::operator ==(const RTLIL::SigChunk &other) const
 {
-	return wire == other.wire && width == other.width && offset == other.offset && data == other.data;
+	return wire == other.wire 
+			&& width == other.width 
+			&& is_real() == other.is_real() 
+			&& offset == other.offset 
+			&& data == other.data;
 }
 
 bool RTLIL::SigChunk::operator !=(const RTLIL::SigChunk &other) const
@@ -5076,7 +5158,10 @@ void RTLIL::SigSpec::check(Module *mod) const
 				if (i > 0)
 					log_assert(chunks_[i-1].wire != NULL);
 				log_assert(chunk.offset == 0);
-				log_assert(chunk.data.size() == (size_t)chunk.width);
+				if (chunk.is_real())
+					log_assert(chunk.width == 1);
+				else
+					log_assert(chunk.data.size() == (size_t)chunk.width);
 			} else {
 				if (i > 0 && chunks_[i-1].wire == chunk.wire)
 					log_assert(chunk.offset != chunks_[i-1].offset + chunks_[i-1].width);
@@ -5150,6 +5235,9 @@ bool RTLIL::SigSpec::operator ==(const RTLIL::SigSpec &other) const
 	if (width_ != other.width_)
 		return false;
 
+	if (is_real() != other.is_real())
+		return false;
+
 	// Without this, SigSpec() == SigSpec(State::S0, 0) will fail
 	//   since the RHS will contain one SigChunk of width 0 causing
 	//   the size check below to fail
@@ -5194,6 +5282,21 @@ bool RTLIL::SigSpec::is_chunk() const
 	return GetSize(chunks_) == 1;
 }
 
+bool RTLIL::SigSpec::is_real() const
+{
+	cover("kernel.rtlil.sigspec.is_real");
+
+	if (const auto* wire = is_wire() ? as_wire() : nullptr)
+	{
+		return wire->is_real;
+	}
+	if (is_fully_const())
+	{
+		return as_const().is_real();
+	}
+	return false;
+}
+
 bool RTLIL::SigSpec::is_fully_const() const
 {
 	cover("kernel.rtlil.sigspec.is_fully_const");
@@ -5217,6 +5320,9 @@ bool RTLIL::SigSpec::is_fully_zero() const
 			if (it->data[i] != RTLIL::State::S0)
 				return false;
 	}
+	if (is_real()) {
+		return is_fully_const() && as_const().as_real() == 0.0;
+	}
 	return true;
 }
 
@@ -5232,6 +5338,8 @@ bool RTLIL::SigSpec::is_fully_ones() const
 			if (it->data[i] != RTLIL::State::S1)
 				return false;
 	}
+	if (is_real())
+		return false;
 	return true;
 }
 
@@ -5247,6 +5355,8 @@ bool RTLIL::SigSpec::is_fully_def() const
 			if (it->data[i] != RTLIL::State::S0 && it->data[i] != RTLIL::State::S1)
 				return false;
 	}
+	if (is_real())
+		return true;
 	return true;
 }
 
@@ -5262,6 +5372,8 @@ bool RTLIL::SigSpec::is_fully_undef() const
 			if (it->data[i] != RTLIL::State::Sx && it->data[i] != RTLIL::State::Sz)
 				return false;
 	}
+	if (is_real())
+		return false;	
 	return true;
 }
 
@@ -5325,6 +5437,12 @@ int RTLIL::SigSpec::as_int(bool is_signed) const
 	return 0;
 }
 
+double RTLIL::SigSpec::as_real() const
+{
+	cover("kernel.rtlil.sigspec.as_real");
+	return as_const().as_real();
+}
+
 std::string RTLIL::SigSpec::as_string() const
 {
 	cover("kernel.rtlil.sigspec.as_string");
@@ -5349,7 +5467,7 @@ RTLIL::Const RTLIL::SigSpec::as_const() const
 	pack();
 	log_assert(is_fully_const() && GetSize(chunks_) <= 1);
 	if (width_)
-		return chunks_[0].data;
+		return chunks_[0].is_real() ? RTLIL::Const(*chunks_[0].real, RTLIL::Const::real_tag_t()) : chunks_[0].data;
 	return RTLIL::Const();
 }
 

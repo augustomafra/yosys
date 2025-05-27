@@ -919,9 +919,11 @@ wire_type_token:
 	// real
 	TOK_REAL {
 		astbuf3->is_real = true;
+		astbuf3->is_signed = true;
 	} | 
 	TOK_VAR TOK_REAL {
 		astbuf3->is_real = true;
+		astbuf3->is_signed = true;
 	};
 
 net_type:

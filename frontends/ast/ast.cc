@@ -1051,9 +1051,9 @@ double AstNode::asReal(bool is_signed)
 	log_abort();
 }
 
-RTLIL::Const AstNode::realAsConst(int width)
+RTLIL::Const AstNode::realAsConst(int width, bool round_to_binary)
 {
-	double v = round(realvalue);
+	double v = round_to_binary ? round(realvalue) : realvalue;
 	RTLIL::Const result;
 #ifdef EMSCRIPTEN
 	if (!isfinite(v)) {
@@ -1061,6 +1061,8 @@ RTLIL::Const AstNode::realAsConst(int width)
 	if (!std::isfinite(v)) {
 #endif
 		result = std::vector<RTLIL::State>(width, RTLIL::State::Sx);
+	} else if (!round_to_binary) {
+		result = Const(v, RTLIL::Const::real_tag_t());
 	} else {
 		bool is_negative = v < 0;
 		if (is_negative)

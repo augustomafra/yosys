@@ -111,6 +111,7 @@ static RTLIL::SigSpec binop2rtlil(AstNode *that, IdString type, int result_width
 	RTLIL::Wire *wire = current_module->addWire(cell->name.str() + "_Y", result_width);
 	set_src_attr(wire, that);
 	wire->is_signed = that->is_signed;
+	wire->is_real = left.is_real() || right.is_real();
 
 	for (auto &attr : that->attributes) {
 		if (attr.second->type != AST_CONSTANT)
@@ -1508,7 +1509,6 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 			}
 
 			RTLIL::SigSpec sig = realAsConst(width_hint);
-			log_file_warning(filename, location.first_line, "converting real value %e to binary %s.\n", realvalue, log_signal(sig));
 			return sig;
 		}
 
@@ -1874,7 +1874,15 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 		#else
 			int width = max(max(left.size(), right.size()), width_hint);
 		#endif
-			is_signed = children[0]->is_signed && children[1]->is_signed;
+			if (left.is_real() || right.is_real())
+			{
+				width = 1;
+				is_signed = true;
+			}
+			else 
+			{
+				is_signed = children[0]->is_signed && children[1]->is_signed;
+			}
 			return binop2rtlil(this, type_name, width, left, right);
 		}
 
