@@ -92,6 +92,7 @@ struct JsonWriter
 					if (bit == State::S0) s = "\"0\"";
 					else if (bit == State::S1) s = "\"1\"";
 					else if (bit == State::Sz) s = "\"z\"";
+					else if (bit.is_real()) s = stringf("\"%f\"", bit.real);
 					else s = "\"x\"";
 				} else
 					s = stringf("%d", sigidcounter++);

@@ -22,6 +22,7 @@
 #include "kernel/sigtools.h"
 #include "kernel/celltypes.h"
 #include "kernel/log.h"
+#include "kernel/utils.h"
 #include <string>
 
 USING_YOSYS_NAMESPACE
@@ -110,6 +111,12 @@ struct SmvWorker
 		int count_chunks = 0;
 		sigmap.apply(sig);
 
+		if (sig.is_fully_const() && sig.is_real()) {
+			s = stringf("%f", sig.as_const().as_real());
+			strbuf.push_back(s);
+			return strbuf.back().c_str();
+		}
+
 		for (int i = 0; i < GetSize(sig); i++)
 			if (partial_assignment_bits.count(sig[i]))
 			{
@@ -187,6 +194,30 @@ struct SmvWorker
 		return rvalue(sig, width, is_signed);
 	}
 
+	const char *rvalue_r(SigSpec sig)
+	{
+		string s;
+		sigmap.apply(sig);
+
+		if (sig.is_wire())
+		{
+			if (const auto* wire = sig.as_wire())
+			{
+				s = stringf("%s", cid(wire->name));
+			}
+		}
+		else if (sig.is_fully_const())
+		{
+			if (sig.is_real())
+				s = stringf("%f", sig.as_const().as_real());
+			else
+			 	s = stringf("%f", static_cast<double>(sig.as_const().as_int(/*is_signed=*/true)));
+		}
+
+		strbuf.push_back(s);
+		return strbuf.back().c_str();
+	}
+
 	const char *lvalue(SigSpec sig)
 	{
 		sigmap.apply(sig);
@@ -207,6 +238,47 @@ struct SmvWorker
 		return temp_id;
 	}
 
+	std::vector<RTLIL::Cell*> topo_sort(RTLIL::Module* module)
+	{
+		TopoSort<RTLIL::Cell *, RTLIL::IdString::compare_ptr_by_name<RTLIL::Cell>> cells;
+		dict<RTLIL::SigBit, Cell *> outbit_to_cell;
+
+		for (auto cell : module->cells()) 
+		{
+			for (const auto &[port_name, sig] : cell->connections()) 
+			{
+				if (cell->output(port_name)) 
+				{
+					for (auto bit : sigmap(sig))
+						outbit_to_cell[bit] = cell;
+				}
+			}
+			cells.node(cell);
+		}
+
+		for (auto cell : module->cells())
+		{
+			for (auto &[port_name, sig] : cell->connections())
+			{
+				if (cell->input(port_name))
+				{
+					for (auto bit : sigmap(sig))
+					{
+						auto it = outbit_to_cell.find(bit);
+						if (it != outbit_to_cell.end())
+							cells.edge(cells.node(it->second), cells.node(cell));
+					}
+				}
+			}
+		}
+
+		if (!cells.sort()) {
+			log_warning("Couldn't topologically sort cells for module %s.\n", log_id(module));
+		}
+
+		return cells.sorted;
+	}
+
 	void run()
 	{
 		f << stringf("MODULE %s\n", cid(module->name));
@@ -217,13 +289,25 @@ struct SmvWorker
 				partial_assignment_wires.insert(wire);
 
 			if (wire->port_input)
-				inputvars.push_back(stringf("%s : unsigned word[%d]; -- %s", cid(wire->name), wire->width, log_id(wire)));
+			{
+				if (wire->is_real)
+				{
+					log_assert(wire->width == 1);
+					inputvars.push_back(stringf("%s : real; -- %s", cid(wire->name), log_id(wire)));
+				} 
+				else
+				{
+					inputvars.push_back(stringf("%s : unsigned word[%d]; -- %s", cid(wire->name), wire->width, log_id(wire)));
+				}
+			}
 
 			if (wire->attributes.count(ID::init))
 				assignments.push_back(stringf("init(%s) := %s;", lvalue(wire), rvalue(wire->attributes.at(ID::init))));
 		}
 
-		for (auto cell : module->cells())
+		auto sorted_cells = topo_sort(module);
+
+		for (auto cell : sorted_cells)
 		{
 			// FIXME: $slice, $concat, $mem
 
@@ -344,6 +428,16 @@ struct SmvWorker
 				if (cell->type == ID($xor))  op = "xor";
 				if (cell->type == ID($xnor)) op = "xnor";
 
+				const auto& port_a = cell->getPort(ID::A);
+				const auto& port_b = cell->getPort(ID::B);
+				if (port_a.is_real() || port_b.is_real())
+				{
+					log_assert(port_a.is_real() && port_b.is_real());
+					definitions.push_back(stringf("%s := %s %s %s;", lvalue(cell->getPort(ID::Y)),
+							rvalue_r(port_a), op.c_str(), rvalue_r(port_b)));					
+					continue;
+				}
+
 				if (cell->getParam(ID::A_SIGNED).as_bool())
 				{
 					definitions.push_back(stringf("%s := unsigned(%s %s %s);", lvalue(cell->getPort(ID::Y)),
@@ -368,6 +462,15 @@ struct SmvWorker
 
 				if (cell->type == ID($div))  op = "/";
 				//if (cell->type == ID($mod))  op = "mod";
+
+				const auto& port_a = cell->getPort(ID::A);
+				const auto& port_b = cell->getPort(ID::B);
+				if (port_a.is_real() || port_b.is_real())
+				{
+					definitions.push_back(stringf("%s := %s %s %s;", lvalue(cell->getPort(ID::Y)),
+							rvalue_r(port_a), op.c_str(), rvalue_r(port_b)));					
+					continue;
+				}
 
 				if (cell->getParam(ID::A_SIGNED).as_bool())
 				{
@@ -397,15 +500,26 @@ struct SmvWorker
 				if (cell->type == ID($ge))  op = ">=";
 				if (cell->type == ID($gt))  op = ">";
 
-				if (cell->getParam(ID::A_SIGNED).as_bool())
+				const auto& port_a = cell->getPort(ID::A);
+				const auto& port_b = cell->getPort(ID::B);
+				if (port_a.is_real() || port_b.is_real())
 				{
-					expr_a = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::A)), width);
-					expr_b = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::B)), width);
+					//log_assert(port_a.is_real() && port_b.is_real());
+					expr_a = rvalue_r(port_a);
+					expr_b = rvalue_r(port_b);
 				}
-				else
+				else 
 				{
-					expr_a = stringf("resize(%s, %d)", rvalue(cell->getPort(ID::A)), width);
-					expr_b = stringf("resize(%s, %d)", rvalue(cell->getPort(ID::B)), width);
+					if (cell->getParam(ID::A_SIGNED).as_bool())
+					{
+						expr_a = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::A)), width);
+						expr_b = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::B)), width);
+					}
+					else
+					{
+						expr_a = stringf("resize(%s, %d)", rvalue(cell->getPort(ID::A)), width);
+						expr_b = stringf("resize(%s, %d)", rvalue(cell->getPort(ID::B)), width);
+					}
 				}
 
 				definitions.push_back(stringf("%s := resize(word1(%s %s %s), %d);", lvalue(cell->getPort(ID::Y)),
@@ -481,7 +595,8 @@ struct SmvWorker
 
 			if (cell->type.in(ID($mux), ID($pmux)))
 			{
-				int width = GetSize(cell->getPort(ID::Y));
+				SigSpec sig_y = cell->getPort(ID::Y);
+				int width = GetSize(sig_y);
 				SigSpec sig_a = cell->getPort(ID::A);
 				SigSpec sig_b = cell->getPort(ID::B);
 				SigSpec sig_s = cell->getPort(ID::S);
@@ -489,15 +604,23 @@ struct SmvWorker
 				string expr;
 				for (int i = 0; i < GetSize(sig_s); i++)
 					expr += stringf("bool(%s) ? %s : ", rvalue(sig_s[i]), rvalue(sig_b.extract(i*width, width)));
-				expr += rvalue(sig_a);
+				expr += sig_y.is_real() ? rvalue_r(sig_a) : rvalue(sig_a);
 
-				definitions.push_back(stringf("%s := %s;", lvalue(cell->getPort(ID::Y)), expr.c_str()));
+				definitions.push_back(stringf("%s := %s;", lvalue(sig_y), expr.c_str()));
 				continue;
 			}
 
 			if (cell->type == ID($dff))
 			{
-				vars.push_back(stringf("%s : unsigned word[%d]; -- %s", lvalue(cell->getPort(ID::Q)), GetSize(cell->getPort(ID::Q)), log_signal(cell->getPort(ID::Q))));
+				if (cell->getPort(ID::Q).is_real())
+				{
+					log_assert(GetSize(cell->getPort(ID::Q)) == 1);
+					vars.push_back(stringf("%s : real; -- %s", lvalue(cell->getPort(ID::Q)), log_signal(cell->getPort(ID::Q))));
+				}
+				else 
+				{
+					vars.push_back(stringf("%s : unsigned word[%d]; -- %s", lvalue(cell->getPort(ID::Q)), GetSize(cell->getPort(ID::Q)), log_signal(cell->getPort(ID::Q))));
+				}
 				assignments.push_back(stringf("next(%s) := %s;", lvalue(cell->getPort(ID::Q)), rvalue(cell->getPort(ID::D))));
 				continue;
 			}
@@ -610,6 +733,12 @@ struct SmvWorker
 			{
 				if (!expr.empty())
 					expr = " :: " + expr;
+
+				if (wire->is_real)
+				{
+					expr = stringf("%f", sigmap(SigBit(wire, i)).real);
+					continue;
+				}
 
 				if (partial_assignment_bits.count(sigmap(SigBit(wire, i))))
 				{
