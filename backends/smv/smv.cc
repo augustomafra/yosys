@@ -260,6 +260,10 @@ struct SmvWorker
 		{
 			for (auto &[port_name, sig] : cell->connections())
 			{
+				if (cell->type == ID($dff))
+				{
+					continue;
+				}
 				if (cell->input(port_name))
 				{
 					for (auto bit : sigmap(sig))
