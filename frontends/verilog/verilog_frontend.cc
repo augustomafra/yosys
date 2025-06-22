@@ -224,6 +224,10 @@ struct VerilogFrontend : public Frontend {
 		log("    -Idir\n");
 		log("        add 'dir' to the directories which are used when searching include\n");
 		log("        files\n");
+		log("    -rnm\n");
+		log("        enable support for SystemVerilog Real Number Modeling (RNM)\n");
+		log("        wires of \"real\" type are elaborated\n");
+		log("        available only with -sv -formal (experimental).\n");		
 		log("\n");
 		log("The command 'verilog_defaults' can be used to register default options for\n");
 		log("subsequent calls to 'read_verilog'.\n");
@@ -274,6 +278,7 @@ struct VerilogFrontend : public Frontend {
 		frontend_verilog_yydebug = false;
 		sv_mode = false;
 		formal_mode = false;
+		rnm_mode = false;
 		noassert_mode = false;
 		noassume_mode = false;
 		norestrict_mode = false;
@@ -294,6 +299,10 @@ struct VerilogFrontend : public Frontend {
 			}
 			if (arg == "-formal") {
 				formal_mode = true;
+				continue;
+			}
+			if (arg == "-rnm") {
+				rnm_mode = true;
 				continue;
 			}
 			if (arg == "-nosynthesis") {
@@ -473,6 +482,12 @@ struct VerilogFrontend : public Frontend {
 			defines_map.add(formal_mode ? "FORMAL" : "SYNTHESIS", "1");
 
 		extra_args(f, filename, args, argidx);
+
+		if (rnm_mode && (!formal_mode || !sv_mode)) {
+			auto rnm_idx = std::find(args.begin(), args.end(), "-rnm");
+			cmd_error(args, rnm_idx != args.end() ? std::distance(args.begin(), rnm_idx) : 0, 
+						"-rnm available only with -sv -formal.");
+		}
 
 		log_header(design, "Executing Verilog-2005 frontend: %s\n", filename.c_str());
 

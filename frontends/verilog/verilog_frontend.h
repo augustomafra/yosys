@@ -61,6 +61,9 @@ namespace VERILOG_FRONTEND
 	// running in -formal mode
 	extern bool formal_mode;
 
+	// running in -rnm mode
+	extern bool rnm_mode;	
+
 	// running in -noassert mode
 	extern bool noassert_mode;
 

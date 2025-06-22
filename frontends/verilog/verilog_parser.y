@@ -67,6 +67,7 @@ namespace VERILOG_FRONTEND {
 	bool do_not_require_port_stubs;
 	bool default_nettype_wire;
 	bool sv_mode, formal_mode, lib_mode, specify_mode;
+	bool rnm_mode;
 	bool noassert_mode, noassume_mode, norestrict_mode;
 	bool assume_asserts_mode, assert_assumes_mode;
 	bool current_wire_rand, current_wire_const;
@@ -918,10 +919,14 @@ wire_type_token:
 	} |
 	// real
 	TOK_REAL {
+		if (!rnm_mode)
+			frontend_verilog_yyerror("real type is only supported in RNM mode!");
 		astbuf3->is_real = true;
 		astbuf3->is_signed = true;
 	} | 
 	TOK_VAR TOK_REAL {
+		if (!rnm_mode)
+			frontend_verilog_yyerror("real type is only supported in RNM mode!");		
 		astbuf3->is_real = true;
 		astbuf3->is_signed = true;
 	};
