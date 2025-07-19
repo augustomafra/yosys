@@ -614,7 +614,7 @@ struct SmvWorker
 				continue;
 			}
 
-			if (cell->type == ID($dff))
+			if (cell->type.in(ID($dff), ID($ff)))
 			{
 				if (cell->getPort(ID::Q).is_real())
 				{
