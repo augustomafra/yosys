@@ -260,7 +260,7 @@ struct SmvWorker
 		{
 			for (auto &[port_name, sig] : cell->connections())
 			{
-				if (cell->type == ID($dff))
+				if (cell->type.in(ID($dff), ID($ff)))
 				{
 					continue;
 				}

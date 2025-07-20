@@ -67,6 +67,7 @@ struct Clk2fflogicPass : public Pass {
 		std::string sig_str = log_signal(sig);
 		sig_str.erase(std::remove(sig_str.begin(), sig_str.end(), ' '), sig_str.end());
 		Wire *sampled_sig = module->addWire(NEW_ID_SUFFIX(stringf("%s#sampled", sig_str.c_str())), GetSize(sig));
+		sampled_sig->is_real = sig.is_real();
 		sampled_sig->attributes[ID::init] = RTLIL::Const(State::S0, GetSize(sig));
 		if (is_fine)
 			module->addFfGate(NEW_ID, sig, sampled_sig);
@@ -79,6 +80,7 @@ struct Clk2fflogicPass : public Pass {
 		std::string sig_str = log_signal(sig);
 		sig_str.erase(std::remove(sig_str.begin(), sig_str.end(), ' '), sig_str.end());
 		Wire *sampled_sig = module->addWire(NEW_ID_SUFFIX(stringf("%s#sampled", sig_str.c_str())), GetSize(sig));
+		sampled_sig->is_real = sig.is_real();
 		sampled_sig->attributes[ID::init] = RTLIL::Const(polarity ? State::S1 : State::S0, GetSize(sig));
 		if (is_fine)
 			module->addFfGate(NEW_ID, sig, sampled_sig);
@@ -94,6 +96,7 @@ struct Clk2fflogicPass : public Pass {
 
 		Wire *sampled_sig = module->addWire(NEW_ID_SUFFIX(stringf("%s#sampled", sig_str.c_str())), GetSize(sig));
 		sampled_sig->attributes[ID::init] = init;
+		sampled_sig->is_real = sig.is_real();
 
 		Cell *cell;
 		if (is_fine)
@@ -178,6 +181,7 @@ struct Clk2fflogicPass : public Pass {
 							log_signal(port.addr), log_signal(port.data));
 
 					Wire *past_clk = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#past_clk#%s", log_id(mem.memid), i, log_signal(port.clk))));
+					past_clk->is_real = port.clk.is_real();
 					past_clk->attributes[ID::init] = port.clk_polarity ? State::S1 : State::S0;
 					module->addFf(NEW_ID, port.clk, past_clk);
 
@@ -193,13 +197,19 @@ struct Clk2fflogicPass : public Pass {
 
 					SigSpec clock_edge = module->Eqx(NEW_ID, {port.clk, SigSpec(past_clk)}, clock_edge_pattern);
 
-					SigSpec en_q = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#en_q", log_id(mem.memid), i)), GetSize(port.en));
+					Wire *en_q_wire = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#en_q", log_id(mem.memid), i)), GetSize(port.en));
+					en_q_wire->is_real = port.en.is_real();
+					SigSpec en_q = en_q_wire;
 					module->addFf(NEW_ID, port.en, en_q);
 
-					SigSpec addr_q = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#addr_q", log_id(mem.memid), i)), GetSize(port.addr));
+					Wire *addr_q_wire = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#addr_q", log_id(mem.memid), i)), GetSize(port.addr));
+					addr_q_wire->is_real = port.addr.is_real();
+					SigSpec addr_q = addr_q_wire;
 					module->addFf(NEW_ID, port.addr, addr_q);
 
-					SigSpec data_q = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#data_q", log_id(mem.memid), i)), GetSize(port.data));
+					Wire *data_q_wire = module->addWire(NEW_ID_SUFFIX(stringf("%s#%d#data_q", log_id(mem.memid), i)), GetSize(port.data));
+					data_q_wire->is_real = port.data.is_real();
+					SigSpec data_q = data_q_wire;
 					module->addFf(NEW_ID, port.data, data_q);
 
 					port.clk = State::S0;

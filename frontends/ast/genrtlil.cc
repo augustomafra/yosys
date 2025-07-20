@@ -485,6 +485,8 @@ struct AST_INTERNAL::ProcessGenerator
 			} while (current_module->wires_.count(wire_name) > 0);
 
 			RTLIL::Wire *wire = current_module->addWire(wire_name, chunk.width);
+			if (wire)
+				wire->is_real = sig.is_real();
 			set_src_attr(wire, always);
 
 			chunk.wire = wire;
