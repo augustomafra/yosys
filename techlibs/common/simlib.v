@@ -2217,6 +2217,23 @@ end
 endmodule
 
 // --------------------------------------------------------
+//* group formal
+
+module \$floor (A, Y);
+
+parameter WIDTH = 0;
+`ifdef FORMAL
+input real A;
+`else
+input A;
+`endif 
+output [WIDTH-1:0] Y;
+
+assign Y = $floor(A);
+
+endmodule
+
+// --------------------------------------------------------
 //* group debug
 
 module \$print (EN, TRG, ARGS);

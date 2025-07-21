@@ -2231,6 +2231,12 @@ namespace {
 				check_expected();
 				return;
 			}
+			if (cell->type == ID($floor)) {
+				port(ID::A, param(ID::A_WIDTH));
+				port(ID::Y, param(ID::Y_WIDTH));
+				check_expected();
+				return;
+			}		
 			/*
 			 * Checklist for adding internal cell types
 			 * ========================================

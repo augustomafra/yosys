@@ -186,6 +186,41 @@ static void check_unique_id(RTLIL::Module *module, RTLIL::IdString id,
 		already_exists(module->memories.at(id), "memory");
 }
 
+// helper function for creating RTLIL code for $floor system function call
+static RTLIL::SigSpec floor2rtlil(AstNode *that, int result_width, const RTLIL::SigSpec &sig)
+{
+	IdString cellname = stringf("$floor$%s:%d$%d", RTLIL::encode_filename(that->filename).c_str(), that->location.first_line, autoidx++);
+	check_unique_id(current_module, cellname, that, "$floor");
+
+	Wire *floor_out = current_module->addWire(cellname.str() + "_Y", result_width);
+	floor_out->is_signed = true;
+	floor_out->is_real = false;
+	set_src_attr(floor_out, that);
+
+	RTLIL::Cell *cell = current_module->addCell(cellname, ID($floor));
+	set_src_attr(cell, that);
+	for (auto &attr : that->attributes) {
+		if (attr.second->type != AST_CONSTANT)
+			log_file_error(that->filename, that->location.first_line, "Attribute `%s' with non-constant value!\n", attr.first.c_str());
+		cell->attributes[attr.first] = attr.second->asAttrConst();
+	}
+	cell->parameters[ID::A_WIDTH] = RTLIL::Const(sig.size());
+	cell->setPort(ID::A, sig);
+	cell->parameters[ID::Y_WIDTH] = result_width;
+	cell->setPort(ID::Y, floor_out);
+
+	std::stringstream sstr;
+	if (sig.is_fully_const())
+		sstr << sig.as_real();
+	else if (sig.is_wire())
+		sstr << sig.as_wire()->name.c_str();
+	log_file_warning(that->filename, that->location.first_line, "converting real value %s to binary %s.\n",
+			 sstr.str().c_str(),
+			 log_signal(floor_out));
+
+	return floor_out;
+}
+
 // helper class for rewriting simple lookahead references in AST always blocks
 struct AST_INTERNAL::LookaheadRewriter
 {
@@ -1262,6 +1297,10 @@ void AstNode::detectSignWidthWorker(int &width_hint, bool &sign_hint, bool *foun
 			width_hint = max(width_hint, 32);
 			break;
 		}
+		if (str == "\\$floor") {
+			sign_hint = true;
+			break;
+		}
 		if (current_scope.count(str))
 		{
 			// This width detection is needed for function calls which are
@@ -2283,6 +2322,14 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 
 				is_signed = sign_hint;
 				return SigSpec(wire);
+			}
+			if (str == "\\$floor")
+			{
+				if (GetSize(children) != 1)
+					input_error("System function %s got %d arguments, expected 1 or 0.\n",
+							RTLIL::unescape_id(str).c_str(), GetSize(children));	
+				SigSpec sig = children[0]->genRTLIL(width_hint, sign_hint);
+				return floor2rtlil(this, width_hint, sig);
 			}
 		}
 		YS_FALLTHROUGH

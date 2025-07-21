@@ -3623,9 +3623,12 @@ skip_dynamic_range_lvalue_expansion:;
 
 				if (children.size() >= 1) {
 					while (children[0]->simplify(true, stage, width_hint, sign_hint)) { }
-					if (!children[0]->isConst())
+					if (!children[0]->isConst()) {
+						if (str == "\\$floor")
+							goto replace_fcall_later;
 						input_error("Failed to evaluate system function `%s' with non-constant argument.\n",
 								RTLIL::unescape_id(str).c_str());
+					}
 					int child_width_hint = width_hint;
 					bool child_sign_hint = sign_hint;
 					children[0]->detectSignWidth(child_width_hint, child_sign_hint);

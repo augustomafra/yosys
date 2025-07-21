@@ -617,6 +617,29 @@ RTLIL::Const RTLIL::const_neg(const RTLIL::Const &arg1, const RTLIL::Const&, boo
 	return RTLIL::const_sub(zero, arg1_ext, true, signed1, result_len);
 }
 
+RTLIL::Const RTLIL::const_floor(const RTLIL::Const &arg1, const RTLIL::Const &, bool, bool, int result_len)
+{
+	if (result_len < 0)
+		result_len = GetSize(arg1);
+
+	double value = floor(arg1.as_real());
+	RTLIL::Const result(RTLIL::State::Sx, result_len);
+#ifdef EMSCRIPTEN
+	if (isfinite(v)) {
+#else
+	if (std::isfinite(value)) {
+#endif
+		bool is_negative = value < 0;
+		if (is_negative)
+			value *= -1;
+		for (int i = 0; i < result_len; i++, value /= 2)
+			result.bits().push_back((fmod(floor(value), 2) != 0) ? RTLIL::State::S1 : RTLIL::State::S0);
+		if (is_negative)
+			result = const_neg(result, result, false, false, result.size());
+	}
+	return result;
+}
+
 RTLIL::Const RTLIL::const_mux(const RTLIL::Const &arg1, const RTLIL::Const &arg2, const RTLIL::Const &arg3)
 {
 	log_assert(arg2.size() == arg1.size());
