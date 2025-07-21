@@ -126,6 +126,8 @@ struct JsonWriter
 				f << stringf("%d", value.as_int());
 			else
 				f << stringf("%u", value.as_int());
+		} else if (value.is_real()) {
+			f << get_string(stringf("%f", value.as_real()));
 		} else {
 			f << get_string(value.as_string());
 		}

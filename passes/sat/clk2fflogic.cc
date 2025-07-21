@@ -68,7 +68,9 @@ struct Clk2fflogicPass : public Pass {
 		sig_str.erase(std::remove(sig_str.begin(), sig_str.end(), ' '), sig_str.end());
 		Wire *sampled_sig = module->addWire(NEW_ID_SUFFIX(stringf("%s#sampled", sig_str.c_str())), GetSize(sig));
 		sampled_sig->is_real = sig.is_real();
-		sampled_sig->attributes[ID::init] = RTLIL::Const(State::S0, GetSize(sig));
+		sampled_sig->attributes[ID::init] = sig.is_real() 
+												? RTLIL::Const(0, RTLIL::Const::real_tag_t{})
+												: RTLIL::Const(State::S0, GetSize(sig));
 		if (is_fine)
 			module->addFfGate(NEW_ID, sig, sampled_sig);
 		else
@@ -95,7 +97,9 @@ struct Clk2fflogicPass : public Pass {
 
 
 		Wire *sampled_sig = module->addWire(NEW_ID_SUFFIX(stringf("%s#sampled", sig_str.c_str())), GetSize(sig));
-		sampled_sig->attributes[ID::init] = init;
+		sampled_sig->attributes[ID::init] = sig.is_real() && !init.is_real() 
+												? RTLIL::Const(init.as_int(), RTLIL::Const::real_tag_t{})
+												: init;
 		sampled_sig->is_real = sig.is_real();
 
 		Cell *cell;
