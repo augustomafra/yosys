@@ -506,23 +506,42 @@ struct SmvWorker
 
 				const auto& port_a = cell->getPort(ID::A);
 				const auto& port_b = cell->getPort(ID::B);
-				if (port_a.is_real() || port_b.is_real())
+				bool is_real = port_a.is_real() || port_b.is_real();
+
+				if (cell->getParam(ID::A_SIGNED).as_bool())
 				{
-					//log_assert(port_a.is_real() && port_b.is_real());
-					expr_a = rvalue_r(port_a);
-					expr_b = rvalue_r(port_b);
-				}
-				else 
-				{
-					if (cell->getParam(ID::A_SIGNED).as_bool())
-					{
+					if (port_a.is_real())
+						expr_a = rvalue_r(port_a);						
+					else {
 						expr_a = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::A)), width);
-						expr_b = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::B)), width);
+						if (is_real)
+							expr_a = stringf("toint(%s)", expr_a.c_str());
 					}
-					else
-					{
+						
+					if (port_b.is_real())
+						expr_b = rvalue_r(port_b);
+					else {
+						expr_b = stringf("resize(signed(%s), %d)", rvalue(cell->getPort(ID::B)), width);
+						if (is_real)
+							expr_b = stringf("toint(%s)", expr_b.c_str());
+					}
+				}
+				else
+				{
+					if (port_a.is_real())
+						expr_a = rvalue_r(port_a);						
+					else {
 						expr_a = stringf("resize(%s, %d)", rvalue(cell->getPort(ID::A)), width);
+						if (is_real)
+							expr_a = stringf("toint(%s)", expr_a.c_str());
+					}
+
+					if (port_b.is_real())
+						expr_b = rvalue_r(port_b);
+					else {
 						expr_b = stringf("resize(%s, %d)", rvalue(cell->getPort(ID::B)), width);
+						if (is_real)
+							expr_b = stringf("toint(%s)", expr_b.c_str());
 					}
 				}
 
