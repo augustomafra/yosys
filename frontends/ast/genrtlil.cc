@@ -1721,6 +1721,9 @@ RTLIL::SigSpec AstNode::genRTLIL(int width_hint, bool sign_hint)
 				sig.replace(*genRTLIL_subst_ptr);
 
 			is_signed = children.size() > 0 ? false : id2ast->is_signed && sign_hint;
+			is_real = children.size() > 0 ? false : id2ast->is_real;
+			if (is_real)
+				is_signed = true;
 			return sig;
 		}
 
