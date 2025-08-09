@@ -2234,6 +2234,23 @@ assign Y = $floor(A);
 endmodule
 
 // --------------------------------------------------------
+//* group formal
+
+module \$itor (A, Y);
+
+parameter WIDTH = 0;
+input [WIDTH-1:0] A;
+`ifdef FORMAL
+output real Y;
+assign Y = $itor(A);
+`else
+output Y;
+assign Y = A;
+`endif 
+
+endmodule
+
+// --------------------------------------------------------
 //* group debug
 
 module \$print (EN, TRG, ARGS);

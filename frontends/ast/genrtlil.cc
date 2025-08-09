@@ -27,6 +27,7 @@
  */
 
 #include "kernel/log.h"
+#include "kernel/rtlil.h"
 #include "kernel/utils.h"
 #include "kernel/binding.h"
 #include "libs/sha1/sha1.h"
@@ -41,6 +42,34 @@ YOSYS_NAMESPACE_BEGIN
 
 using namespace AST;
 using namespace AST_INTERNAL;
+
+// helper function for creating RTLIL code for integer to real conversion
+static RTLIL::SigSpec itor2rtlil(AstNode *that, const RTLIL::SigSpec &arg, bool gen_attributes = true)
+{
+	IdString name = stringf("$itor$%s:%d$%d", RTLIL::encode_filename(that->filename).c_str(), that->location.first_line, autoidx++);
+	RTLIL::Cell *cell = current_module->addCell(name, ID($itor));
+	set_src_attr(cell, that);
+
+	RTLIL::Wire *wire = current_module->addWire(cell->name.str() + "_Y", 1);
+	set_src_attr(wire, that);
+	wire->is_signed = true;
+	wire->is_real = true;
+
+	if (gen_attributes)
+		for (auto &attr : that->attributes) {
+			if (attr.second->type != AST_CONSTANT)
+				that->input_error("Attribute `%s' with non-constant value!\n", attr.first.c_str());
+			cell->attributes[attr.first] = attr.second->asAttrConst();
+		}
+
+	cell->parameters[ID::A_SIGNED] = RTLIL::Const(that->children[0]->is_signed);
+	cell->parameters[ID::A_WIDTH] = RTLIL::Const(arg.size());
+	cell->setPort(ID::A, arg);
+
+	cell->parameters[ID::Y_WIDTH] = wire->width;
+	cell->setPort(ID::Y, wire);
+	return wire;
+}
 
 // helper function for creating RTLIL code for unary operations
 static RTLIL::SigSpec uniop2rtlil(AstNode *that, IdString type, int result_width, const RTLIL::SigSpec &arg, bool gen_attributes = true)
@@ -113,20 +142,33 @@ static RTLIL::SigSpec binop2rtlil(AstNode *that, IdString type, int result_width
 	wire->is_signed = that->is_signed;
 	wire->is_real = left.is_real() || right.is_real();
 
+	RTLIL::SigSpec left_sig = left;
+	bool left_sign = that->children[0]->is_signed;
+	if (wire->is_real && !left.is_real()) {
+		left_sig = itor2rtlil(that, left, /*gen_attributes=*/true);
+		left_sign = true;
+	}
+	RTLIL::SigSpec right_sig = right;
+	bool right_sign = that->children[1]->is_signed;
+	if (wire->is_real && !right.is_real()) {
+		right_sig = itor2rtlil(that, right, /*gen_attributes=*/true);
+		right_sign = true;
+	}
+
 	for (auto &attr : that->attributes) {
 		if (attr.second->type != AST_CONSTANT)
 			that->input_error("Attribute `%s' with non-constant value!\n", attr.first.c_str());
 		cell->attributes[attr.first] = attr.second->asAttrConst();
 	}
 
-	cell->parameters[ID::A_SIGNED] = RTLIL::Const(that->children[0]->is_signed);
-	cell->parameters[ID::B_SIGNED] = RTLIL::Const(that->children[1]->is_signed);
+	cell->parameters[ID::A_SIGNED] = RTLIL::Const(left_sign);
+	cell->parameters[ID::B_SIGNED] = RTLIL::Const(right_sign);
 
-	cell->parameters[ID::A_WIDTH] = RTLIL::Const(left.size());
-	cell->parameters[ID::B_WIDTH] = RTLIL::Const(right.size());
+	cell->parameters[ID::A_WIDTH] = RTLIL::Const(left_sig.size());
+	cell->parameters[ID::B_WIDTH] = RTLIL::Const(right_sig.size());
 
-	cell->setPort(ID::A, left);
-	cell->setPort(ID::B, right);
+	cell->setPort(ID::A, left_sig);
+	cell->setPort(ID::B, right_sig);
 
 	cell->parameters[ID::Y_WIDTH] = result_width;
 	cell->setPort(ID::Y, wire);

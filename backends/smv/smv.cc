@@ -731,6 +731,16 @@ struct SmvWorker
 				continue;			
 			}
 
+			if (cell->type == ID($itor)) {
+				log_assert(!cell->getPort(ID::A).is_real() && cell->getPort(ID::Y).is_real());
+
+				const SigSpec& input = cell->getPort(ID::A);
+				definitions.push_back(stringf("%s := toint(%s);", lvalue(cell->getPort(ID::Y)),
+							      rvalue(input, input.size(), cell->getParam(ID::A_SIGNED).as_bool())));
+
+				continue;
+			}
+
 			if (cell->type[0] == '$') {
 				if (cell->type.in(ID($dffe), ID($sdff), ID($sdffe), ID($sdffce)) || cell->type.str().substr(0, 6) == "$_SDFF" || (cell->type.str().substr(0, 6) == "$_DFFE" && cell->type.str().size() == 10)) {
 					log_error("Unsupported cell type %s for cell %s.%s -- please run `dffunmap` before `write_smv`.\n",

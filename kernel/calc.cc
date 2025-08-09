@@ -640,6 +640,13 @@ RTLIL::Const RTLIL::const_floor(const RTLIL::Const &arg1, const RTLIL::Const &, 
 	return result;
 }
 
+RTLIL::Const RTLIL::const_itor(const RTLIL::Const &arg1, const RTLIL::Const &, bool signed1, bool, int)
+{
+	int value = arg1.as_int(signed1);
+	RTLIL::Const real_value(value, RTLIL::Const::real_tag_t{});
+	return real_value;
+}
+
 RTLIL::Const RTLIL::const_mux(const RTLIL::Const &arg1, const RTLIL::Const &arg2, const RTLIL::Const &arg3)
 {
 	log_assert(arg2.size() == arg1.size());

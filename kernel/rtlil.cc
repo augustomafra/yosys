@@ -2236,7 +2236,14 @@ namespace {
 				port(ID::Y, param(ID::Y_WIDTH));
 				check_expected();
 				return;
-			}		
+			}
+			if (cell->type == ID($itor)) {
+				param_bool(ID::A_SIGNED);
+				port(ID::A, param(ID::A_WIDTH));
+				port(ID::Y, param(ID::Y_WIDTH));
+				check_expected();
+				return;
+			}
 			/*
 			 * Checklist for adding internal cell types
 			 * ========================================

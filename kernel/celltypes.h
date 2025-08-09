@@ -118,7 +118,7 @@ struct CellTypes
 		std::vector<RTLIL::IdString> unary_ops = {
 			ID($not), ID($pos), ID($buf), ID($neg),
 			ID($reduce_and), ID($reduce_or), ID($reduce_xor), ID($reduce_xnor), ID($reduce_bool),
-			ID($logic_not), ID($slice), ID($lut), ID($sop), ID($floor)
+			ID($logic_not), ID($slice), ID($lut), ID($sop), ID($floor), ID($itor)
 		};
 
 		std::vector<RTLIL::IdString> binary_ops = {
@@ -342,7 +342,7 @@ struct CellTypes
 			type = ID($shl);
 
 		if (type != ID($sshr) && type != ID($sshl) && type != ID($shr) && type != ID($shl) && type != ID($shift) && type != ID($shiftx) &&
-				type != ID($pos) && type != ID($buf) && type != ID($neg) && type != ID($not) && type != ID($floor)) {
+				type != ID($pos) && type != ID($buf) && type != ID($neg) && type != ID($not) && type != ID($floor) && type != ID($itor)) {
 			if (!signed1 || !signed2)
 				signed1 = false, signed2 = false;
 		}
@@ -386,6 +386,7 @@ struct CellTypes
 		HANDLE_CELL_TYPE(pos)
 		HANDLE_CELL_TYPE(neg)
 		HANDLE_CELL_TYPE(floor)
+		HANDLE_CELL_TYPE(itor)
 #undef HANDLE_CELL_TYPE
 
 		if (type.in(ID($_BUF_), ID($buf)))
