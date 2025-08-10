@@ -140,7 +140,7 @@ static RTLIL::SigSpec binop2rtlil(AstNode *that, IdString type, int result_width
 	RTLIL::Wire *wire = current_module->addWire(cell->name.str() + "_Y", result_width);
 	set_src_attr(wire, that);
 	wire->is_signed = that->is_signed;
-	wire->is_real = left.is_real() || right.is_real();
+	wire->is_real = !type.in(ID($lt), ID($le), ID($eq), ID($ne), ID($eqx), ID($nex), ID($ge), ID($gt)) && (left.is_real() || right.is_real());
 
 	RTLIL::SigSpec left_sig = left;
 	bool left_sign = that->children[0]->is_signed;
