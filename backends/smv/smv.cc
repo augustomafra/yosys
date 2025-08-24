@@ -112,7 +112,7 @@ struct SmvWorker
 		sigmap.apply(sig);
 
 		if (sig.is_fully_const() && sig.is_real()) {
-			s = stringf("%f", sig.as_const().as_real());
+			s = stringf("%.17f", sig.as_const().as_real());
 			strbuf.push_back(s);
 			return strbuf.back().c_str();
 		}
@@ -209,9 +209,9 @@ struct SmvWorker
 		else if (sig.is_fully_const())
 		{
 			if (sig.is_real())
-				s = stringf("%f", sig.as_const().as_real());
+				s = stringf("%.17f", sig.as_const().as_real());
 			else
-			 	s = stringf("%f", static_cast<double>(sig.as_const().as_int(/*is_signed=*/true)));
+			 	s = stringf("%.17f", static_cast<double>(sig.as_const().as_int(/*is_signed=*/true)));
 		}
 
 		strbuf.push_back(s);
@@ -778,7 +778,7 @@ struct SmvWorker
 
 				if (wire->is_real)
 				{
-					expr = stringf("%f", sigmap(SigBit(wire, i)).real);
+					expr = stringf("%.17f", sigmap(SigBit(wire, i)).real);
 					continue;
 				}
 
